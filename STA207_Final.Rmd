@@ -1,0 +1,644 @@
+---
+title: "STA 207 Final Project: How Neurons in the Visual Cortex React to Stimuli and How Neural Activity Might be utilized to Forecast"
+author: "Jaehyeon Park(917279076)"
+date: "3/20/2023"
+output:  
+  rmdformats::readthedown:
+    fig_width = 8:
+    fig_height = 5:
+    code_folding: hide
+    self_contained: true
+    lightbox: true
+    gallery: false
+    highlight: tango
+    flexdashboard::flex_dashboard:
+    orientation: rows
+---
+# 01. Abstract
+
+This study looked at how neurons in the visual cortex react to stimuli presented on the left and right sides of the visual field and how neural activity might be utilized to forecast how perceptual judgments will turn out. The experiment presented visual stimuli on either the left or right side of the screen, recording neuronal activity in the visual cortex of 10 mice using two-photon calcium imaging. The findings demonstrated discrete groups of neurons that were either more receptive to stimuli on the left or right side or responded similarly to stimuli on both sides in the visual cortex. These neurons responded differently to stimuli presented on the left and right sides. The study also showed that machine learning algorithms have an accuracy of about 70% in predicting the result of perceptual judgments based on neural activity in the visual cortex. These findings shed light on the visual cortex's representation and processing of visual information and the potential for behavior prediction. Further research will be needed to understand how these principles apply to regions like the cerebellum and brainstem that were not included in the current survey, how they extend to those regions and the extent to which comparable principles govern the neural correlates of various choice tasks.
+
+# 02. Introduction
+
+In a visual choice test, this study discovered straightforward organizing principles for the location of neurons conveying behavioral correlates in the mouse brain. Whereas neurons that encode non-selective activity are dispersed, those that encode choice are concentrated in the midbrain and forebrain. Increased subcortical activity and decreased neocortical activity are characteristics of engagement. The study identifies anatomical organizing principles for choice-related signals and emphasizes the significance of multi-alternative tasks for researching the brain correlates of behavioral choice. Further research will be required to comprehend the circuit mechanisms that uphold these principles and how they apply to other desirable tasks.(Steinmetz et al., 2019). This report will deal with the parts of the data, not the entire dataset. We will mainly focus on the two questions we are interested in: `1. "How do neurons in the visual cortex respond to the stimuli presented on the left and right?"` and `2. "How to predict the outcome of each trial using the neural activities and stimuli?".` Specifically, we mainly talked about the first question in the Inferential analysis and Sensitivity analysis part and the second in the Predictive modeling part. 
+
+# 03. Background
+
+This project only use some subset of dataset. In other words, the results or interpreption of this report could be simpler than the main thesis, and the reader could find the main thesis here: https://www.ncbi.nlm.nih.gov/pmc/articles/PMC6913580/#S6title.   
+It could be help the readers understand this report. 
+
+The research described in this paper, which took place across 39 sessions and involved ten mice, can be summed up as follows. The mice were subjected to separate random visual stimulation on two displays placed on either side of them throughout each session. The contrast levels of the stimuli ranged from 0, 0.25, 0.5, and 1, with 0 denoting the absence of a stimulus. The visual stimuli were used to prompt the mice's decisions, and they were then rewarded or punished accordingly. Throughout the experiments, the activity of the mice's visual cortex neurons was captured and made available as spike trains, which are collections of timestamps matching cell firing.
+
+In this study, we specifically concentrate on the spike trains of neurons in the visual cortex from the start of the stimulus to 0.4 seconds after it started. Furthermore, we only used five sessions (1–5) from two mice (Cori and Frossman).
+
+# 04. Descriptive analysis
+
+## 04.01 Dataset
+
+```{r, fig.width=100, message=FALSE, warning=FALSE}
+library(psych)
+library(DT)
+session=list()
+for(i in 1:5){
+  session[[i]]=readRDS(paste('/Users/jaypark/Desktop/STA207_FINALREPORT/session',i,'.rds',sep=''))
+}
+var_session = names(session[[i]])
+var_session = data.frame(t(var_session))
+datatable(var_session, class = 'nowrap', options = list(autoWidth = TRUE, columnDefs = list(list(width = '50%', targets = 0))))
+```
+There are 7 varaibles: `contrast_left`, `contrast_right`, `feedback_type`, `mouse_name`, `date_exp`, `spks`, `time`. Except `mouse_name` and `data_exp`, each variable means like below:  
+`feedback_type`: type of the feedback, 1 for success and -1 for failure  
+`contrast_left`: contrast of the left stimulus  
+`contrast_right`: contrast of the right stimulus  
+`time`: centers of the time bins for spks  
+`spks`: numbers of spikes of neurons in the visual cortex in time bins defined in time  
+
+## 04.02 Response variable
+
+With these variables, we need to make a response variable for Q1: `"How do neurons in the visual cortex respond to the stimuli presented on the left and right?"` For this question, we will use the mean firing rate, which is calculated as, for each trial, the average number of spikes per second across all neurons within a given 0.4 seconds time interval. There are alternatives for mean firing rate, such as maximum or median value, but we can check that alternative has limitations. When we use the maximum value, there are only yield few different unique results. In addition, since `spks` has only 0 or 1 value, when we use the median value, there is a chance that all the results are zero value. we can check this situation using the table and histogram below (1:mean, 2:median, 3:max). Therefore, it is reasonable to use mean firing rate which is relatively normally distributed.  
+## 04.03 Visualization of 1:mean, 2:median, 3:max variable
+```{r, fig.width=100, message=FALSE, warning=FALSE}
+# Obtain the firing rate 
+# averaged over [0,0.4] seconds since stim onsets
+# averaged across all neurons 
+
+ID=1
+t=0.4 # from Background 
+
+n.trials=length(session[[ID]]$spks)
+n.neurons=dim(session[[ID]]$spks[[1]])[1]
+# Obtain the firing rate 
+mean_firingrate=numeric(n.trials)
+for(i in 1:n.trials){
+  mean_firingrate[i]=sum(session[[ID]]$spks[[i]])/n.neurons/t
+}
+median_firingrate=numeric(n.trials)
+for(i in 1:n.trials){
+  median_firingrate[i]=median(session[[ID]]$spks[[i]])/t
+}
+max_firingrate=numeric(n.trials)
+for(i in 1:n.trials){
+  max_firingrate[i]=max(session[[ID]]$spks[[i]])/t
+}
+mean_firingrate.t  = data.frame(t(mean_firingrate))
+median_firingrate.t  = data.frame(t(median_firingrate))
+max_firingrate.t  = data.frame(t(max_firingrate))
+firingrate = rbind(mean_firingrate.t, median_firingrate.t, max_firingrate.t)
+datatable(firingrate, caption = 'Session 1', class = 'nowrap', options = list(autoWidth = TRUE, columnDefs = list(list(width = '50%', targets = 0))))
+#to make dataframe
+left1 = as.data.frame(session[[1]]$contrast_left)
+right1 = as.data.frame(session[[1]]$contrast_right)
+df1 = cbind(left1, right1, mean_firingrate, max_firingrate, 1)
+colnames(df1) <- c('left','right','mean', 'max', 'session')
+```
+
+```{r, message=FALSE, warning=FALSE}
+par(mfrow=c(1,3))
+hist(mean_firingrate,
+main="Mean firingrate of session 1",
+xlab="trial",
+xlim=c(0,10),
+col="darkmagenta",
+)
+hist(median_firingrate,
+main="Median firingrate of session 1",
+xlab="trial",
+xlim=c(0,5),
+col="darkblue",
+)
+hist(max_firingrate,
+main="Max firingrate of session 1",
+xlab="trial",
+xlim=c(0,15),
+col="darkgreen",
+)
+```
+
+```{r echo=FALSE, fig.width=100, message=FALSE, warning=FALSE}
+# Obtain the firing rate 
+# averaged over [0,0.4] seconds since stim onsets
+# averaged across all neurons 
+
+ID=2
+t=0.4 # from Background 
+
+n.trials=length(session[[ID]]$spks)
+n.neurons=dim(session[[ID]]$spks[[1]])[1]
+# Obtain the firing rate 
+mean_firingrate=numeric(n.trials)
+for(i in 1:n.trials){
+  mean_firingrate[i]=sum(session[[ID]]$spks[[i]])/n.neurons/t
+}
+median_firingrate=numeric(n.trials)
+for(i in 1:n.trials){
+  median_firingrate[i]=median(session[[ID]]$spks[[i]])/t
+}
+max_firingrate=numeric(n.trials)
+for(i in 1:n.trials){
+  max_firingrate[i]=max(session[[ID]]$spks[[i]])/t
+}
+mean_firingrate.t  = data.frame(t(mean_firingrate))
+median_firingrate.t  = data.frame(t(median_firingrate))
+max_firingrate.t  = data.frame(t(max_firingrate))
+firingrate = rbind(mean_firingrate.t, median_firingrate.t, max_firingrate.t)
+datatable(firingrate, caption = 'Session 2', class = 'nowrap', options = list(autoWidth = TRUE, columnDefs = list(list(width = '50%', targets = 0))))
+#to make dataframe
+left2 = as.data.frame(session[[2]]$contrast_left)
+right2 = as.data.frame(session[[2]]$contrast_right)
+df2 = cbind(left2, right2, mean_firingrate, max_firingrate, 2)
+colnames(df2) <- c('left','right','mean', 'max', 'session')
+```
+
+```{r, message=FALSE, warning=FALSE}
+par(mfrow=c(1,3))
+hist(mean_firingrate,
+main="Mean firingrate of session 1",
+xlab="trial",
+xlim=c(0,5),
+col="darkmagenta",
+)
+hist(median_firingrate,
+main="Median firingrate of session 1",
+xlab="trial",
+xlim=c(0,5),
+col="darkblue",
+)
+hist(max_firingrate,
+main="Max firingrate of session 1",
+xlab="trial",
+xlim=c(0,15),
+col="darkgreen",
+)
+```
+
+```{r, fig.width=100, message=FALSE, warning=FALSE}
+# Obtain the firing rate 
+# averaged over [0,0.4] seconds since stim onsets
+# averaged across all neurons 
+
+ID=3
+t=0.4 # from Background 
+
+n.trials=length(session[[ID]]$spks)
+n.neurons=dim(session[[ID]]$spks[[1]])[1]
+# Obtain the firing rate 
+mean_firingrate=numeric(n.trials)
+for(i in 1:n.trials){
+  mean_firingrate[i]=sum(session[[ID]]$spks[[i]])/n.neurons/t
+}
+median_firingrate=numeric(n.trials)
+for(i in 1:n.trials){
+  median_firingrate[i]=median(session[[ID]]$spks[[i]])/t
+}
+max_firingrate=numeric(n.trials)
+for(i in 1:n.trials){
+  max_firingrate[i]=max(session[[ID]]$spks[[i]])/t
+}
+mean_firingrate.t  = data.frame(t(mean_firingrate))
+median_firingrate.t  = data.frame(t(median_firingrate))
+max_firingrate.t  = data.frame(t(max_firingrate))
+firingrate = rbind(mean_firingrate.t, median_firingrate.t, max_firingrate.t)
+datatable(firingrate, caption = 'Session 3', class = 'nowrap', options = list(autoWidth = TRUE, columnDefs = list(list(width = '50%', targets = 0))))
+#to make dataframe
+left3 = as.data.frame(session[[3]]$contrast_left)
+right3 = as.data.frame(session[[3]]$contrast_right)
+df3 = cbind(left3, right3, mean_firingrate,max_firingrate,3)
+colnames(df3) <- c('left','right','mean', 'max', 'session')
+```
+
+```{r, message=FALSE, warning=FALSE}
+par(mfrow=c(1,3))
+hist(mean_firingrate,
+main="Mean firingrate of session 1",
+xlab="trial",
+xlim=c(0,10),
+col="darkmagenta",
+)
+hist(median_firingrate,
+main="Median firingrate of session 1",
+xlab="trial",
+xlim=c(0,5),
+col="darkblue",
+)
+hist(max_firingrate,
+main="Max firingrate of session 1",
+xlab="trial",
+xlim=c(0,15),
+col="darkgreen",
+)
+```
+
+```{r, fig.width=100, message=FALSE, warning=FALSE}
+# Obtain the firing rate 
+# averaged over [0,0.4] seconds since stim onsets
+# averaged across all neurons 
+
+ID=4
+t=0.4 # from Background 
+
+n.trials=length(session[[ID]]$spks)
+n.neurons=dim(session[[ID]]$spks[[1]])[1]
+# Obtain the firing rate 
+mean_firingrate=numeric(n.trials)
+for(i in 1:n.trials){
+  mean_firingrate[i]=sum(session[[ID]]$spks[[i]])/n.neurons/t
+}
+median_firingrate=numeric(n.trials)
+for(i in 1:n.trials){
+  median_firingrate[i]=median(session[[ID]]$spks[[i]])/t
+}
+max_firingrate=numeric(n.trials)
+for(i in 1:n.trials){
+  max_firingrate[i]=max(session[[ID]]$spks[[i]])/t
+}
+mean_firingrate.t  = data.frame(t(mean_firingrate))
+median_firingrate.t  = data.frame(t(median_firingrate))
+max_firingrate.t  = data.frame(t(max_firingrate))
+firingrate = rbind(mean_firingrate.t, median_firingrate.t, max_firingrate.t)
+datatable(firingrate, caption = 'Session 4', class = 'nowrap', options = list(autoWidth = TRUE, columnDefs = list(list(width = '50%', targets = 0))))
+#to make dataframe
+left4 = as.data.frame(session[[4]]$contrast_left)
+right4 = as.data.frame(session[[4]]$contrast_right)
+df4 = cbind(left4, right4, mean_firingrate,max_firingrate, 4)
+colnames(df4) <- c('left','right','mean', 'max', 'session')
+```
+
+```{r, message=FALSE, warning=FALSE}
+par(mfrow=c(1,3))
+hist(mean_firingrate,
+main="Mean firingrate of session 1",
+xlab="trial",
+xlim=c(0,5),
+col="darkmagenta",
+)
+hist(median_firingrate,
+main="Median firingrate of session 1",
+xlab="trial",
+xlim=c(0,5),
+col="darkblue",
+)
+hist(max_firingrate,
+main="Max firingrate of session 1",
+xlab="trial",
+xlim=c(0,15),
+col="darkgreen",
+)
+```
+
+```{r, fig.width=100, message=FALSE, warning=FALSE}
+# Obtain the firing rate 
+# averaged over [0,0.4] seconds since stim onsets
+# averaged across all neurons 
+
+ID=5
+t=0.4 # from Background 
+
+n.trials=length(session[[ID]]$spks)
+n.neurons=dim(session[[ID]]$spks[[1]])[1]
+# Obtain the firing rate 
+mean_firingrate=numeric(n.trials)
+for(i in 1:n.trials){
+  mean_firingrate[i]=sum(session[[ID]]$spks[[i]])/n.neurons/t
+}
+median_firingrate=numeric(n.trials)
+for(i in 1:n.trials){
+  median_firingrate[i]=median(session[[ID]]$spks[[i]])/t
+}
+max_firingrate=numeric(n.trials)
+for(i in 1:n.trials){
+  max_firingrate[i]=max(session[[ID]]$spks[[i]])/t
+}
+mean_firingrate.t  = data.frame(t(mean_firingrate))
+median_firingrate.t  = data.frame(t(median_firingrate))
+max_firingrate.t  = data.frame(t(max_firingrate))
+firingrate = rbind(mean_firingrate.t, median_firingrate.t, max_firingrate.t)
+datatable(firingrate, caption = 'Session 5', class = 'nowrap', options = list(autoWidth = TRUE, columnDefs = list(list(width = '50%', targets = 0))))
+#to make dataframe
+left5 = as.data.frame(session[[5]]$contrast_left)
+right5 = as.data.frame(session[[5]]$contrast_right)
+df5 = cbind(left5, right5, mean_firingrate,max_firingrate, 5)
+colnames(df5) <- c('left','right','mean','max', 'session')
+```
+
+```{r, message=FALSE, warning=FALSE}
+par(mfrow=c(1,3))
+hist(mean_firingrate,
+main="Mean firingrate of session 1",
+xlab="trial",
+xlim=c(0,5),
+col="darkmagenta",
+)
+hist(median_firingrate,
+main="Median firingrate of session 1",
+xlab="trial",
+xlim=c(0,5),
+col="darkblue",
+)
+hist(max_firingrate,
+main="Max firingrate of session 1",
+xlab="trial",
+xlim=c(0,15),
+col="darkgreen",
+)
+```
+
+We only need `contrast_left,` `contrast_right,` `mean firing rate,` and `session` variables. We will construct the model with these variables. Therefore, we make a new data frame only with these variables. It is shown below. `contrast_left,` `contrast_right` will be the fixed-effect factors, and `session` will be the random-effect factor. 
+
+```{r, message=FALSE, warning=FALSE}
+df = rbind(df1, df2, df3, df4, df5)
+df$session = as.factor(df$session)
+datatable(df, caption = 'New dataframe', class = 'nowrap', options = list(autoWidth = TRUE, columnDefs = list(list(width = '50%', targets = 0))))
+```
+
+
+# 05. Inferential analysis
+
+## 05.01 General Model of Split-Plot Designs
+
+In this part, we will use the `Split-Plot Designs` because it is a valuable tool for experimental design in situations where it is not practical to randomize the assignment of treatments to experimental units altogether, and they offer several advantages over other types of designs. The general form of `Split-Plot Designs` is like below. Also, it can be more cost-effective than other designs because they require fewer experimental units to achieve the same level of statistical power. `contrast_left,` `contrast_right` will be the fixed-effect factors, and `session` will be the random-effect factor.
+$$Y_{ijk} =  \mu_{\cdot\cdot} + \alpha_i+\beta_j+\eta_{k(i)}+ (\alpha\beta)_{ij}+\epsilon_{ijk}$$
+where $\alpha_i, \beta_j$ are fixed effects which are `contrast_left`, `contrast_right` and $\eta_{k(i)}$ is the whole plot error which is `session`. We will use `lmer` function to check this design. In addtion, $\{\epsilon_{ijk}\}$ are i.i.d. $N(0,\sigma^2)$, and $\eta_{k(i)}$ are i.i.d. $N(0,\sigma_\eta^2)$.
+
+## 05.02 Checking the Null Hypothesis.
+
+We need to check whether the interaction effect exists. In other words, we need to check the null hypothesis: 
+\[
+H_0: {\rm all\ } (\alpha\beta)_{ij}\ {\rm are\ the\ zero} \ \  {\rm v.s.} \ \  H_1: {\rm not \ all\ } (\alpha\beta)_{ij}\ {\rm are\ the\ zero}.
+\]
+before check the summary, we need to decide `contrast_left`, `contrast_right` as factor or numeric. `contrast_left`, `contrast_right` are as numeric at `lm1` and `contrast_left`, `contrast_right` are as factor at `lm2`.
+
+```{r, message=FALSE, warning=FALSE}
+library(lme4)
+lm1 = lmer(mean ~ left + right + left*right +  (1 | session), data = df)
+lm2 = lmer(mean ~ as.factor(left) + as.factor(right) + as.factor(left*right) +  (1 | session), data = df)
+AIC(lm1, lm2)
+BIC(lm1, lm2)
+```
+
+Since both AIC and BIC have lower values when `contrast_left` and `contrast_right` are numeric, we will use them as numeric.
+
+```{r, message=FALSE, warning=FALSE}
+library(lmerTest)
+fit.model = lmer(mean ~ left + right + left*right +  (1 | session), data = df)
+summary(fit.model)
+```
+
+As we can see from the summary above, the p-value of interaction is 0.1222. Therefore, we could not reject the null hypothesis at the significance level of $\alpha = 0.05$. In other words, the interaction effect does not exist, so we could use a reduced additive model. Furthermore, we also can check that both fixed effects of `contrast_left` and `contrast_right` are significant at the significance level of $\alpha = 0.05$. 
+We want to find the best combination using the application of Tukey-Kramer confidence intervals, but we did not treat `contrast_left,` `contrast_right` as a factor, so we will check this in the next part what if `contrast_left,` `contrast_right` are a factor. 
+
+# 06. Sensitivity analysis
+
+## 06.01  Model Diagnostics
+
+```{r, message=FALSE, warning=FALSE}
+library(lme4)
+library(nlme)
+library(geoR)
+par(mfrow=c(2,2))
+plot(lm1, resid(., scaled=TRUE) ~ fitted(.), abline = 0,pch=16,col=df$session,xlab="Fitted values",ylab="Standardised residuals")
+par(mfrow=c(3,2))
+for(i in 1:length(unique(df$session))){
+plot(resid(lm1,type="pearson")[df$session==i]~predict(lm1)[df$session==i],pch=16,ylim=c(-4,4),main=paste("session",i),xlab="Fitted values",ylab="Standardised residuals")
+lines(x=c(-1000,1000),y=c(0,0))
+}
+par(mfrow=c(1,1))
+plot(lm1, as.factor(session) ~ resid(., scaled=TRUE),abline=0,pch=16,xlab="Standardised residuals",ylab="sessions")
+#qqplot
+qqnorm(resid(lm1),pch=16, col=df$session)
+qqline(resid(lm1))
+
+#Calculate leverage
+lev<-hat(model.matrix(lm1))
+
+#Plot leverage against standardised residuals
+plot(resid(lm1,type="pearson")~lev,las=1,ylab="Standardised residuals",xlab="Leverage")
+
+#Calculate Cook's Distance
+cd<-cooks.distance(lm1)
+#N.B. If Cook's distance is greater than 1 this highlights problematic datapoints
+
+#Plot leverage and Cook's distance together
+par(mfrow=c(1,1))
+plot(lev,pch=16,col="red",ylim=c(0,1.2),las=1,ylab="Leverage/Cook's distance value")
+points(cd,pch=17,col="blue")
+points(x=150,y=1.1,pch=16,col="red")
+points(x=150,y=0.9,pch=17,col="blue")
+text(x=155,y=1.1,"Leverage",adj=c(0,0.5))
+text(x=155,y=0.9,"Cook's distance",adj=c(0,0.5))
+
+#It is possible to do this using a histogram but this can be unclear if there are few random effect levels as in our example
+lattice::dotplot(ranef(lm1, condVar=TRUE))
+ranefs<-as.data.frame(ranef(lm1))
+ranefs2<-ranefs[order(ranefs$condval),]
+
+plot(NULL,ylim=c(0,9),xlim=c(-2.5,1.5),yaxt="n",ylab="Random effect level",xlab="",cex.axis=1.5,cex.lab=1.5)
+lines(x=c(0,0),y=c(-1,10))
+for(i in 1:nrow(ranefs2)){
+  lines(x=c(ranefs2[i,4]-ranefs2[i,5]*1.96,ranefs2[i,4]+ranefs2[i,5]*1.96),y=rep(i,2))
+  points(x=ranefs2[i,4],y=i,cex=1.5,pch=21,col="dark blue",bg="dodger blue")
+}
+axis(side=2,at=seq(1,5,1),labels=ranefs2$grp,las=1,cex.axis=1.5)
+```
+According to the plots above, this dataset has a few outliers. We could get a better result if we find the outliers and remove them. Even though there are some outliers, the plots show that residuals are relatively normally distributed for each session. The residuals roughly form a "horizontal band" around the 0 lines. It suggests that the variances of the error terms are equal. Lastly, we also check the random effect level.
+
+## 06.02 Using Other Statistics(1)
+
+As we mentioned in section 5,  we need to decide `contrast_left` and `contrast_right` as factors or numeric. We already checked AIC and BIC, but the value is almost the same, so in this section, we will think about the `contrast_left` and `contrast_right` factors. 
+
+```{r, message=FALSE, warning=FALSE}
+library(lmerTest)
+fit.model1 = lmer(mean ~ as.factor(left) + as.factor(right) + as.factor(left)*as.factor(right) +  (1 | session), data = df)
+summary(fit.model1)
+```
+
+We can find that some interaction terms are significant at the significance level of $\alpha = 0.05$, such as left(0.5)right(0.25), left(1)right(0.25). In addition, the fixed effect factor left(1) is not significant at the significance level of $\alpha = 0.05$. 
+
+```{r, message=FALSE, warning=FALSE}
+# Find the best combination
+library(emmeans)
+pairs(emmeans(lm2, "left"))
+pairs(emmeans(lm2, "right"))
+```
+
+From the Tukey test, we can find that factors left: 1, and right: 1 have the largest mean, but we already know that factor 1 is the largest stimuli, so this information is not that meaningful. However, it is meaningful that if we use the value of `contrast_left`, `contrast_right` as a factor, interaction variables could be used in the experiment we construct well. 
+
+## 06.02 Using Other Statistics(2)
+
+We will think what if we used max firing rate instead of mean firing rate. It is useless use median firing rate since we check that all of the median value was zero. Firstly, we add max value at the data frame.
+```{r, message=FALSE, warning=FALSE}
+library(lmerTest)
+fit.model2 = lmer(max ~ left + right + left*right +  (1 | session), data = df)
+summary(fit.model2)
+```
+
+When we use max firing rate instead of using mean firing rate, not only interaction effect is still not significant, but also 
+`contrast_left` effect is not significant at the significance level of $\alpha = 0.05$. 
+
+```{r, message=FALSE, warning=FALSE}
+library(lmerTest)
+fit.model2 = lmer(max ~ as.factor(left) + as.factor(right) + as.factor(left*right) +  (1 | session), data = df)
+summary(fit.model2)
+```
+
+Even when we think contrast_left` and `contrast_right` as factors, only `contrast_right` effect is significant at the significance level of $\alpha = 0.05$ unlike using mean firing rate. 
+
+# 07. Predictive modeling
+
+## 07.01 Dataframe
+
+In this section, we need to use `feedback_type`: type of the feedback, 1 for success and -1 for failure as a responsible variable. Therefore, we need to add `feedback_type` into dataframe. For using `glm` we will replace the value of feedback_type "-1" into "0".
+
+```{r, message=FALSE, warning=FALSE}
+feed1 = as.data.frame(session[[1]]$feedback_type)
+feed2 = as.data.frame(session[[2]]$feedback_type)
+feed3 = as.data.frame(session[[3]]$feedback_type)
+feed4 = as.data.frame(session[[4]]$feedback_type)
+feed5 = as.data.frame(session[[5]]$feedback_type)
+
+df1 = cbind(df1, feed1)
+colnames(df1) <- c('left','right','mean', 'max', 'session', 'feedback_type')
+df2 = cbind(df2, feed2)
+colnames(df2) <- c('left','right','mean', 'max', 'session', 'feedback_type')
+df3 = cbind(df3, feed3)
+colnames(df3) <- c('left','right','mean', 'max', 'session', 'feedback_type')
+df4 = cbind(df4, feed4)
+colnames(df4) <- c('left','right','mean', 'max', 'session', 'feedback_type')
+df5 = cbind(df5, feed5)
+colnames(df5) <- c('left','right','mean', 'max', 'session', 'feedback_type')
+df = rbind(df1, df2, df3, df4, df5)
+df$session = as.factor(df$session)
+df$left = as.factor(df$left)
+df$right = as.factor(df$right)
+df["feedback_type"][df["feedback_type"] == -1] <- 0
+datatable(df, caption = 'New dataframe', class = 'nowrap', options = list(autoWidth = TRUE, columnDefs = list(list(width = '50%', targets = 0))))
+```
+
+## 07.02 Likelihood Ratio Test
+
+We want to test
+$H_0 : \beta_{interaction} = 0$ VS $H_A : \beta_{interaction} \neq 0$
+
+```{r, message=FALSE, warning=FALSE}
+feed = glm(feedback_type ~ left + right + left*right + session,
+                   family = binomial(), data = df)
+h0.feed = glm(feedback_type ~ left + right + session,
+                   family = binomial(), data = df)
+anova(h0.feed, feed, test = 'Chi')
+```
+
+The small p-value indicates the null is rejected. Therefore, the larger model is more appropriate.
+
+## 07.03 Deviance Table
+
+```{r, message=FALSE, warning=FALSE}
+anova(glm(feedback_type ~ left + right + left*right + session,
+                   family = binomial(), data = df), test = "Chi")
+anova(glm(feedback_type ~ session + left*right + right + left,
+                   family = binomial(), data = df), test = "Chi")
+```
+We have conflicting findings from the models with varied ordering of the predictors. All of the deviation tables for the various predictor orders must be compared. Only when there are few predictors are deviation tables utilized for model selection.
+
+## 07.04 Interpretation
+
+```{r, message=FALSE, warning=FALSE}
+summary(feed)
+```
+The fitted model is :  
+$logit{P(having success result)}$ = 1.03 -0.79$X_{left = 0.25}$ - 0.99$X_{right = 0.25}$ -0.54$X_{right = 1}$ -1.89$X_{left = 0.5, right = 0.5}$ -1.70$X_{left = 1, right = 0.5}$
+
+## 07.05 Model Diagnostics
+
+### 07.05.01 Pearson residuals and deviance residuals
+
+```{r, message=FALSE, warning=FALSE}
+res.P = residuals(feed, type = "pearson")
+res.D = residuals(feed, type = "deviance")
+boxplot(cbind(res.P, res.D), names = c("Pearson", "Deviance"))
+```
+The boxplots show similar distributions of the two types of residuals, no lack-of-fit is provided.
+
+### 07.05.02 Residual plots
+
+```{r, message=FALSE, warning=FALSE}
+par(mfrow=c(1,2))
+plot(feed$fitted.values, res.P, pch=16, cex=0.6, ylab='Pearson Residuals', xlab='Fitted Values')
+lines(smooth.spline(feed$fitted.values, res.P, spar=0.9), col=2)
+abline(h=0, lty=2, col='grey')
+plot(feed$fitted.values, res.D, pch=16, cex=0.6, ylab='Deviance Residuals', xlab='Fitted Values')
+lines(smooth.spline(feed$fitted.values, res.D, spar=0.9), col=2)
+abline(h=0, lty=2, col='grey')
+```
+The purpose is to check if there are any systematic patterns left in the residuals. The red curves are quite close to 0 in the two plots, but may have a slight cubic pattern
+
+### 07.05.03 Leverage points
+
+```{r, message=FALSE, warning=FALSE}
+par(mfrow=c(1,1))
+leverage = hatvalues(feed)
+plot(names(leverage), leverage, xlab="Index", type="h")
+points(names(leverage), leverage, pch=16, cex=0.6)
+p = length(coef(feed))
+n = nrow(df)
+abline(h=2*p/n,col=2,lwd=2,lty=2)
+```
+
+### 07.05.04 Cook’s distance
+
+To detect outliers/influential observations, we can use Cook’s distance. There are many outliers/influential observations, but we do not clearly know which is an outlier or influential. 
+A point can be an outlier without being influential. A point can be influential without being an outlier. A point can be both or neither.
+
+```{r, message=FALSE, warning=FALSE}
+infPts = which(leverage>2*p/n)
+cooks = cooks.distance(feed)
+plot(cooks, ylab="Cook's Distance", pch=16, cex=0.6)
+points(infPts, cooks[infPts], pch=17, cex=0.8, col=2) # influential points
+susPts = as.numeric(names(sort(cooks[infPts], decreasing=TRUE)[1:3]))
+text(susPts, cooks[susPts], susPts, adj=c(-0.1,-0.1), cex=0.7, col=4)
+```
+
+## 07.05 Prediction, Sensitivity and Specificity
+
+```{r, message=FALSE, warning=FALSE}
+# Splitting dataset
+library(caTools)
+set.seed(16012)
+split = sample.split(df$feedback_type, SplitRatio = 0.7) # use 70% of dataset as training set and 30% as test set
+feed.train = subset(df[101:1196,], split == "TRUE")
+feed.test = subset(df, split == "FALSE")
+feed.train = glm(feedback_type ~ left + right + left*right + session,
+                   family = binomial(), data = feed.train)
+threshold = 0.5
+predicted_values = ifelse(predict(feed.train, newdata = feed.test)>threshold,1,0)
+actual_values = feed.test$feedback_type
+conf_matrix = table(predicted_values, actual_values)
+conf_matrix
+```
+Not using the first 100 trials in Session 1 in model training, we plug in $101^{th}$ value to the end of the dataset into the training set. Also, We choose the threshold as $0.5$ since the standard to decide success or failure is now $0$nd $-1$. 
+Sensitivity is the `true positive rate` that is the probability of a positive test result, conditioned on the individual truly being positive. Specificity is the `true negative rate` that is the probability of a negative test result, conditioned on the individual truly being negative. From the result above,   
+Sensitivity : $\frac{157}{157+78}$ $\approx$ $0.67$, Specificity : $\frac{81}{81+42}$ $\approx$ $0.66$ 
+
+# 08. Discussion
+
+This study aimed to investigate the neural responses of neurons in the visual cortex to stimuli presented on the left and right sides of the visual field and to investigate the potential of using neural activity to predict the outcome of perceptual judgments. In this project, we only use sessions 1 to 5 and use the Split-Plot Designs. The responsible variable is the mean firing rate which is calculated as, for each trial, the average number of spikes per second across all neurons within a given 0.4 seconds time interval.contrast_left and contrast_right are the fixed-effect factors, and the session is the random-effect factor. This part aimed to find whether there is an interaction effect. We used lmer function to investigate; there is no interaction effect if we used contrast_left and contrast_right variables as numeric. When we make them as factors, not strongly, but there are interaction effects. That is why when we study for the second part, we consider the interaction effect since we treat contrast_left and contrast_right as factors in this part. In the second part, we used feedback_type as responsible variables. We made a glm model to find which variables we needed to use. Next, we decide on standard values, such as the threshold or making training sets without the first 100 trials in Session 1. Finally, we use Sensitivity and Specificity to predict. For both questions, we did Model Diagnostics. We did not find a substantial violation in both part, but we can easily find some outliers. If we remove the outliers and use a more precise method, we could get a better result next time. 
+
+# 09. Acknowledgement
+
+- Piazza • Ask. answer. explore. whenever. (n.d.). Retrieved March 20, 2023, from https://www.piazza.com/
+
+# 10. Reference
+
+- Steinmetz, N. A., Zatka-Haas, P., Carandini, M., &amp; Harris, K. D. (2019). Distributed coding of choice, action and engagement across the Mouse Brain. Nature, 576(7786), 266–273. https://doi.org/10.1038/s41586-019-1787-x 
+- Silk, M. (2019, November 11). Mixed model diagnostics. Retrieved March 20, 2023, from https://dfzljdn9uc3pi.cloudfront.net/2020/9522/1/MixedModelDiagnostics.html 
+- Juba. (n.d.). Juba/RMDFORMATS: HTML output formats for RMARKDOWN documents. GitHub. Retrieved March 20, 2023, from https://github.com/juba/rmdformats 
+- Welcome to the libretexts and UC Davis jupyterhub! JupyterHub. (n.d.). Retrieved March 20, 2023, from https://jupyterhub.ucdavis.edu/user/jpapark@ucdavis.edu/tree/StatDataScience/Notes 
+
+# 11. SessionInfo
+
+```{r}
+sessionInfo()
+```
+
+# 12. Appendix
+\subsection*{Appendix: R Script}
+```{r, ref.label=knitr::all_labels(),echo=TRUE,eval=FALSE}
+```
